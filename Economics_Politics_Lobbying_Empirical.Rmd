@@ -1,0 +1,1306 @@
+---
+title: "Economics_Politics_Lobbying_Empirical"
+output: html_document
+date: "2025-02-26"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+install.packages('readr')
+library(readr)
+
+
+#Uploading Data Files Given File Paths
+
+Industry_Lobbying_OS <- read_csv("~/Downloads/Industry_Lobbying_OS.csv")
+
+Non_Industry_Lobbying_OS <- read_csv("~/Downloads/Non_Industry_Lobbying_OS.csv")
+
+Firm_Lobbying_CC_OS <- read_csv("~/Downloads/Firm_Lobbying_CC_OS.csv")
+
+
+##Formatting Panel Data
+
+#Creating a Unique ID for each firm-industry combination (accommodates firms designated as lobbying in more than one industry)
+
+install.packages('dplyr')
+library(dplyr)
+
+
+Firm_Lobbying_CC_OS_1 <- Firm_Lobbying_CC_OS %>%
+  mutate(id = as.integer(factor(paste(`Company Name`, `Lobbying Industry`, sep = "_"))))
+
+#Rename Fiscal Year as Year
+
+Firm_Lobbying_CC_OS_2 <- Firm_Lobbying_CC_OS_1 %>%
+  rename(Year = `Data Year - Fiscal`)
+
+#Format Data for Panel Analysis
+
+install.packages('plm')
+library(plm)
+
+p_Firm_Lobbying <- pdata.frame(Firm_Lobbying_CC_OS_2, index = c("id", "Year"))
+
+#Observing Dimensionality
+
+pdim(p_Firm_Lobbying)
+
+##Merging Annual Industry Lobbying Expenditures with Firm-Level Lobbying Expenditures and Fundamental Characteristics
+
+#Converting Year from type Double to Factor
+
+Industry_Lobbying_OS$Year <- as.factor(as.character(Industry_Lobbying_OS$Year))
+
+
+
+#Performing a Left Join on Firm-Lobbying to Add Respective Annual Lobbying Industry Values and Share Shifts (First Differences in Industry Shares)
+
+
+Firm_Industry <- p_Firm_Lobbying %>%
+  left_join(Industry_Lobbying_OS, by = c("Year", "Lobbying.Industry"))
+
+#Cleaning by Dropping Empty Space Columns
+
+Firm_Industry_Panel <- Firm_Industry %>%
+  select(where(~!all(is.na(.))))
+
+#For firms that did not lobbying a given year, assigning them '0' as an industry lobbying measure
+
+Firm_Industry_Panel <- Firm_Industry_Panel %>%
+mutate(Industry.Lobbying.Expenditures = ifelse(is.na(Industry.Lobbying.Expenditures), 0, Industry.Lobbying.Expenditures))
+
+##Generating shift-share calculations
+
+#Generating Fraction of Industry Lobbying, Lobbying Expenditures for each firm
+
+Firm_Industry_Panel <- Firm_Industry_Panel %>%
+mutate(Firm.Industry.Expenditure.Share = ifelse(Lobbying.Industry == "None", 0, Lobbying.Expenditures/Industry.Lobbying.Expenditures))
+
+#Adding Total Federal Lobbying Expenditures each year for every observation. Source: OpenSecrets.com
+
+Firm_Industry_Panel <- Firm_Industry_Panel %>%
+  mutate(Total.Federal.Lobbying = case_when(
+    Year == "2006" ~ 2624987588,
+    Year == "2007" ~ 2867114907,
+    Year == "2008" ~ 3302264393,
+    Year == "2009" ~ 3494868104,
+    Year == "2010" ~ 3500702521,
+    Year == "2011" ~ 3314476339,
+    Year == "2012" ~ 3295960432,
+    Year == "2013" ~ 3235788685,
+    Year == "2014" ~ 3254991739,
+    Year == "2015" ~ 3224630109,
+    Year == "2016" ~ 3155150420,
+    Year == "2017" ~ 3375743530,
+    Year == "2018" ~ 3459954937,
+    Year == "2019" ~ 3510816176,
+    Year == "2020" ~ 3530902786,
+    Year == "2021" ~ 3776981481,
+    Year == "2022" ~ 4105268302,
+    TRUE ~ 0  
+  ))
+
+
+#Adding Percent Non-Firm-Specific Lobbying as an alternative measure - Selected as the Sum of OpenSecrets categorized Annual `Business Association`, `Civil Servant`, `Non-Profit Education`, `Non-Profit Institution`, 'Other`, `Clergy/Religious Organization`, `Tribal Government`, `Ideology/Single Issue`, `Labor Unions`, and `Health Professional Organization` lobbying expenditures, divided by Total Federal Lobbying Expenditures
+
+
+Firm_Industry_Panel <- Firm_Industry_Panel %>%
+  mutate(Percentage.Non.Firm.Specific.Lobbying = case_when(
+    Year == "2006" ~ 0.218718371,
+    Year == "2007" ~ 0.209212418,
+    Year == "2008" ~ 0.208671702,
+    Year == "2009" ~ 0.215340808,
+    Year == "2010" ~ 0.211224458,
+    Year == "2011" ~ 0.190825997,
+    Year == "2012" ~ 0.200421745,
+    Year == "2013" ~ 0.191376539,
+    Year == "2014" ~ 0.204056271,
+    Year == "2015" ~ 0.191471853,
+    Year == "2016" ~ 0.196004959,
+    Year == "2017" ~ 0.196076743,
+    Year == "2018" ~ 0.199800686,
+    Year == "2019" ~ 0.201202782,
+    Year == "2020" ~ 0.183941471,
+    Year == "2021" ~ 0.187596181,
+    Year == "2022" ~ 0.186541979,
+    TRUE ~ 0  
+  ))
+
+#Adding the First Difference of Percentage.Non.Firm.Specific.Lobbying as alternative Shift-Share
+
+Firm_Industry_Panel <- Firm_Industry_Panel %>%
+  mutate(Non.Firm.Specific.Shift.Share = case_when(
+    Year == "2006" ~ -0.0088,
+    Year == "2007" ~ -0.00951,
+    Year == "2008" ~ -0.00054,
+    Year == "2009" ~ 0.006669,
+    Year == "2010" ~ -0.00412,
+    Year == "2011" ~ -0.0204,
+    Year == "2012" ~ 0.009596,
+    Year == "2013" ~ -0.00905,
+    Year == "2014" ~ 0.01268,
+    Year == "2015" ~ -0.01258,
+    Year == "2016" ~ 0.004533,
+    Year == "2017" ~ 0.0000718,
+    Year == "2018" ~ 0.003723943,
+    Year == "2019" ~ 0.001402095,
+    Year == "2020" ~ -0.017261311,
+    Year == "2021" ~ 0.00365471,
+    Year == "2022" ~ -0.001054202,
+    TRUE ~ 0  
+  ))
+
+##
+
+#Generating Alt Bartik (Shift-Share) Instrument Based on Non-Firm Specific Lobbying Shift Shares
+
+#First, calculating Baseline Firm Percentage of Industry - Baseline calculated from the first year a firm has positive lobbying expenditures recorded to eliminate possible effects from time-varying effects of total federal lobbying changes on instrumental value, removes bias at cost of efficiency (Borusyak, Hull 2022)
+
+install.packages(`tidyr`)
+library(tidyr)
+
+Firm_Industry_Panel_B <- Firm_Industry_Panel
+
+Firm_Industry_Panel_B$Year <- as.numeric(as.character(Firm_Industry_Panel_B$Year))
+
+Firm_Industry_Panel_B <- Firm_Industry_Panel_B %>%
+  group_by(id, Lobbying.Industry) %>%
+  mutate(
+    First.Lobbying.Year = min(Year[Lobbying.Expenditures > 0], na.rm = TRUE), # Find first year with lobbying expenditures > 0
+    Baseline.Share = if_else(Year == First.Lobbying.Year, Firm.Industry.Expenditure.Share, NA_real_)
+  ) %>%
+  fill(Baseline.Share, .direction = "down") %>%  # Fill down to make it constant over time
+  ungroup()
+
+Firm_Industry_Panel_B$Baseline.Share <- ifelse(is.na(Firm_Industry_Panel_B$Baseline.Share ), 0, Firm_Industry_Panel_B$Baseline.Share) #Giving Never-Lobbying Firms '0' for baseline share in lieu of NA.
+
+
+Firm_Industry_Panel_B$Shift.Share <- ifelse(is.na(Firm_Industry_Panel_B$Shift.Share ), 0, Firm_Industry_Panel_B$Shift.Share) #Giving Firms without Industry Shift-Share Values '0' in lieu of NA.
+
+
+
+#Calculating corresponding baseline industry shares of federal expenditure in same first year of individual firm positive lobbying expenditures
+
+Firm_Industry_Panel_B <- Firm_Industry_Panel_B %>%
+  group_by(id, Lobbying.Industry) %>%
+  mutate(First.Lobbying.Year = min(Year[Lobbying.Expenditures > 0], na.rm = TRUE),
+    Baseline.Industry.Share = if_else(Year == First.Lobbying.Year, Industry.Share, NA_real_)) %>%
+  fill(Baseline.Industry.Share, .direction = "down") %>%  # Fill down to keep constant over time
+  ungroup()
+
+Firm_Industry_Panel_B$Baseline.Industry.Share <- ifelse(is.na(Firm_Industry_Panel_B$Baseline.Industry.Share), 0, Firm_Industry_Panel_B$Baseline.Industry.Share) # 0 in Lieu of NA for Never Lobbying
+
+Firm_Industry_Panel_B <- Firm_Industry_Panel_B %>%
+  mutate(alt.bartik.instrument = Baseline.Share * Baseline.Industry.Share * Non.Firm.Specific.Shift.Share) #Calculating Instrument as Product of Baseline Firm Share of Industry, Corresponding Baseline Industry Share of Federal, and Non-Firm Specific Shift-Share
+
+Firm_Industry_Panel_B$alt.bartik.instrument <- ifelse(is.na(Firm_Industry_Panel_B$alt.bartik.instrument), 0, Firm_Industry_Panel_B$alt.bartik.instrument) #0 in lieu of NA for non-lobbying firms
+
+
+
+#Generating Product of Baseline Firm Share of Industry with Corresponding Baseline Industry Share of Federal to Acquire 'Sum' of Firm-Level Total Exposure Share.
+
+Firm_Industry_Panel_B <- Firm_Industry_Panel_B %>%
+  mutate(Firm_Exposure = Baseline.Share * Baseline.Industry.Share)
+
+
+
+install.packages("AER")
+library(AER)
+
+install.packages('fixest')
+library(fixest)
+
+#Most of the firms in raw data do not report R&D Expenses, but most report In Process R&D Expenses (mostly 0). As R&D reporting is both discretionary in its reporting, potentially a causal collider with respect to lobbying expenditure changes and tax-rate/benefit changes, and one of the potential mechanisms by which benefits may be hypothesized to accrue, better excluded as potential control variable to remove bias from Simpson's Paradox. Instead relying on fixed effects to control for more research-intensive industry types. 
+
+#Subsetting for Firm-Years without Missing Reports in Essential Variables of Interest and Confounders
+
+Accounting_Panel <- Firm_Industry_Panel_B[complete.cases(Firm_Industry_Panel_B[, c("Percentage.Non.Firm.Specific.Lobbying", "Capital.Expenditures", "Revenue...Total", "Assets...Total", "Liabilities...Total", "Unrecog..Tax.Benefits...End.of.Year", "GIC.Industries", "Employees", "Pretax.Income", "Market.Value...Total...Fiscal", "Income.Taxes...Current", "Income.Taxes.Paid", "Inventories...Total")]), ] 
+
+#Calculating Accounting Variables in Accounting Panel
+
+Accounting_Panel$Leverage <- Accounting_Panel$Liabilities...Total / Accounting_Panel$Assets...Total
+
+Accounting_Panel$Firm.Size <- Accounting_Panel$Market.Value...Total...Fiscal
+
+Accounting_Panel$Capital.Intensity <- Accounting_Panel$Capital.Expenditures / Accounting_Panel$Assets...Total
+
+Accounting_Panel$Inventory.Intensity <- Accounting_Panel$Inventories...Total / Accounting_Panel$Assets...Total
+
+Accounting_Panel$Labor.Intensity <- Accounting_Panel$Employees / Accounting_Panel$Assets...Total
+
+Accounting_Panel$Assets.Total <- Accounting_Panel$Assets...Total
+
+Accounting_Panel$Liabilities.Total <- Accounting_Panel$Liabilities...Total
+
+Accounting_Panel$Inventories.Total <- Accounting_Panel$Inventories...Total
+
+Accounting_Panel$Market.Value <- Accounting_Panel$Market.Value...Total...Fiscal
+
+
+#Applying Total Federal Lobbying Expenditures data as column value for each firm in corresponding year.
+
+Accounting_Panel <- Accounting_Panel %>%
+  mutate(Total.Federal.Lobbying = case_when(
+    Year == "2006" ~ 2624987588,
+    Year == "2007" ~ 2867114907,
+    Year == "2008" ~ 3302264393,
+    Year == "2009" ~ 3494868104,
+    Year == "2010" ~ 3500702521,
+    Year == "2011" ~ 3314476339,
+    Year == "2012" ~ 3295960432,
+    Year == "2013" ~ 3235788685,
+    Year == "2014" ~ 3254991739,
+    Year == "2015" ~ 3224630109,
+    Year == "2016" ~ 3155150420,
+    Year == "2017" ~ 3375743530,
+    Year == "2018" ~ 3459954937,
+    Year == "2019" ~ 3510816176,
+    Year == "2020" ~ 3530902786,
+    Year == "2021" ~ 3776981481,
+    Year == "2022" ~ 4105268302,
+    TRUE ~ 0  
+  ))
+
+
+#Dropping the only complete observation for the year 2006
+
+Accounting_Panel <- Accounting_Panel[Accounting_Panel$Year != 2006, ]
+
+
+
+install.packages("marginaleffects")
+library(marginaleffects)
+
+
+#Two Stage Residual Inclusion (2SRI) control function approach.
+
+
+Probability_Probit <- glm(Lobbying.Expenditures > 0 ~ alt.bartik.instrument + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total + factor(GIC.Industries) + factor(Year), family = binomial(link = "probit"), data = Accounting_Panel)
+
+summary(Probability_Probit)
+
+#Note, probit model with unit fixed effects may take long time to run, creates an incidental parameters problem, and creates collinearity with many units that do not vary in whether they lobbied in a given year.
+
+
+
+##
+
+#Extracting Cumulative Density Distribution and Probability Density Distribution of the estimated Probit model to Calculate Generalized Residuals: 
+
+z_hat <- predict(Probability_Probit, type = "link")
+
+phi <- dnorm(z_hat)
+Phi <- pnorm(z_hat)
+
+#Applying Generalized Residuals from Probit for Each Observation
+
+Accounting_Panel$generalized_residuals <- ifelse(Accounting_Panel$Lobbying.Expenditures > 0,  phi / Phi,  -phi / (1 - Phi))
+
+
+#Truncating Sample to Current Lobbying Firms within each year
+
+CurrentLobbyingAccounting <- Accounting_Panel[Accounting_Panel$IfLobby..Current. == 1, ]
+
+
+#First Stage IV Specifications: Linear, Log-Linear, Log-Modulus-Linear
+
+iv_first_stage_p <- feols(Lobbying.Expenditures ~ alt.bartik.instrument + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total | GIC.Industries + Year, vcov = ~GIC.Industries, data = CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+iv_first_stage_log <- feols(log(Lobbying.Expenditures) ~ alt.bartik.instrument + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total | GIC.Industries + Year, vcov = ~GIC.Industries, data = CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+iv_first_stage_log_mod <- feols((sign(Lobbying.Expenditures) * log(abs(Lobbying.Expenditures) + 1)) ~ alt.bartik.instrument + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total | GIC.Industries + Year, vcov = ~GIC.Industries, data = CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+
+
+#Problem of 'incomplete shares' highlighted by Borusyak et. al. 2020 arises from shift-share instruments with a component that varies outside of the proposed source of quasi-random variation biasing the instrument when the sum of exposure shares varies across observations. In the present application, firm-level baseline shares of lobbying employed do not vary across time, and the only tim-varying influences on the value for the instrumental time-varying shock outside of the fluctuating share of non-industry specific lobbying arise from variations in Total Federal Lobbying itself. Given that total federal lobbying is collinear with Year Period fixed effects, I propose that the potential bias from incomplete shares in the present environment is adequately controlled by the inclusion of fixed effects by industry classification and Year. 
+
+#Clustering errors based on industry GIC code, as the presumed impact of shifts in competitive pressure from non-industry lobbying, though assumed quasi-random, are unlikely to be independent with respect to the anticipated effect on specific firm-industry combination id. Additionally, Adao et. al. 2019 determine that shift-share regression designs may be prone to over-rejection of null hypotheses when correlation exists between state units of observation with similar shares, so additional and preferred 'exposure-robust' standard errors may be calculated for second-stage treatment effects of interests. 
+
+#Viewing initial summaries and Generating Predicted First-Stage IV Values
+
+etable(iv_first_stage_p, fitstat = ~ n + r2 + wr2 + wald)
+
+CurrentLobbyingAccounting$Predicted.Lobbying <- predict(iv_first_stage_p)
+
+etable(iv_first_stage_log, fitstat = ~ n + r2 + wr2 + wald)
+
+CurrentLobbyingAccounting$Predicted.Log.Lobbying <- predict(iv_first_stage_log)
+
+etable(iv_first_stage_log_mod, fitstat = ~ n + r2 + wr2 + wald)
+
+CurrentLobbyingAccounting$Log.Mod.Predicted.Lobbying <- predict(iv_first_stage_log_mod)
+
+
+#Estimating Second Stage Primary and Additional Specifications for Unrecognized Tax Benefits (End of Year)
+
+iv_second_stage_Benefits_p <- feols(Unrecog..Tax.Benefits...End.of.Year ~ Predicted.Lobbying + generalized_residuals + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total | GIC.Industries + Year, vcov = ~GIC.Industries, data = CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+etable(iv_second_stage_Benefits_p, fitstat = ~ n + r2 + wr2)
+
+TWFE_Benefits_p <- feols(Unrecog..Tax.Benefits...End.of.Year ~ Lobbying.Expenditures + generalized_residuals + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total | GIC.Industries + Year, vcov = ~GIC.Industries, data = CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+etable(TWFE_Benefits_p, fitstat = ~ n + r2 + wr2)
+
+iv_second_stage_Benefits_No2SRI <- feols(Unrecog..Tax.Benefits...End.of.Year ~ Predicted.Lobbying + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total | GIC.Industries + Year, vcov = ~GIC.Industries, data = CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+etable(iv_second_stage_Benefits_No2SRI, fitstat = ~ n + r2 + wr2)
+
+#Obtaining Exposure-Robust (Adão-Kolesár-Morales) Standard Errors for Unrecognized Tax Benefits
+
+install.packages("ShiftShareSE")
+library(ShiftShareSE)
+
+library(dplyr)
+
+# Create the W matrix (column of exposure weights)
+W <- CurrentLobbyingAccounting %>%
+  select(Firm_Exposure) %>%  # Only the exposure weights column
+  as.matrix()
+
+# Check W matrix
+head(W)
+
+Benefits_ss_se <- ivreg_ss(Unrecog..Tax.Benefits...End.of.Year ~ generalized_residuals + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total + factor(GIC.Industries) + factor(Year) | Predicted.Lobbying, X = alt.bartik.instrument, data = CurrentLobbyingAccounting, W=W, method=c("akm"))
+
+print(Benefits_ss_se)
+
+Benefits_No2SRI_ss_se <- ivreg_ss(Unrecog..Tax.Benefits...End.of.Year ~ Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total + factor(GIC.Industries) + factor(Year) | Predicted.Lobbying, X = alt.bartik.instrument, data = CurrentLobbyingAccounting, W=W, method=c("akm"))
+
+print(Benefits_No2SRI_ss_se)
+
+
+#Note, can subsequently manually append Adão-Kolesár-Morales (AKM) (2019) exposure-robust standard errors and/or confidence intervals to etable Latex output, but direct and seamless substitution is not presently available for the present Fixest package options to my knowledge. 
+
+##
+
+
+
+#Estimating Second Stage Primary and Additional Specifications for Income Taxes Current and Income Taxes Paid (Log-Modulus Specifications Allow Inclusion of Negative Income Tax Observations)
+
+
+iv_second_stage_IT_log_modulus_current_log <- feols(sign(Income.Taxes...Current) * log(abs(Income.Taxes...Current) + 0.000001) ~ Log.Mod.Predicted.Lobbying + generalized_residuals + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total | GIC.Industries + Year, vcov = ~GIC.Industries, data = CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+etable(iv_second_stage_IT_log_modulus_current_log, fitstat = ~ n + r2 + wr2)
+
+
+iv_second_stage_IT_log_modulus_current_log_No2SRI <- feols(sign(Income.Taxes...Current) * log(abs(Income.Taxes...Current) + 0.000001) ~ Log.Mod.Predicted.Lobbying + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total | GIC.Industries + Year, vcov = ~GIC.Industries, data = CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+etable(iv_second_stage_IT_log_modulus_current_log_No2SRI, fitstat = ~ n + r2 + wr2)
+
+CurrentLobbyingAccounting$Log.Mod.Lobbying.Expenditures <- sign(CurrentLobbyingAccounting$Lobbying.Expenditures) * log(abs(CurrentLobbyingAccounting$Lobbying.Expenditures) + 1) #Generating Non-Instrumented Log.Mod Lobbying Expenditures for TWFE
+
+TWFE_IT_log_modulus_current_log <- feols(sign(Income.Taxes...Current) * log(abs(Income.Taxes...Current) + 0.000001) ~ Log.Mod.Lobbying.Expenditures + generalized_residuals + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total | GIC.Industries + Year, vcov = ~GIC.Industries, data = CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+etable(TWFE_IT_log_modulus_current_log, fitstat = ~ n + r2 + wr2)
+
+
+iv_second_stage_IT_log_modulus_paid_log <- feols(sign(Income.Taxes.Paid) * log(abs(Income.Taxes.Paid) + 0.000001) ~ Log.Mod.Predicted.Lobbying + generalized_residuals + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total | GIC.Industries + Year, vcov = ~GIC.Industries, data = CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+etable(iv_second_stage_IT_log_modulus_paid_log, fitstat = ~ n + r2 + wr2)
+
+iv_second_stage_IT_log_modulus_paid_log_No2SRI <- feols(sign(Income.Taxes.Paid) * log(abs(Income.Taxes.Paid) + 0.000001) ~ Log.Mod.Predicted.Lobbying + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total | GIC.Industries + Year, vcov = ~GIC.Industries, data = CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+etable(iv_second_stage_IT_log_modulus_paid_log_No2SRI, fitstat = ~ n + r2 + wr2)
+
+
+TWFE_IT_log_modulus_paid_log <- feols(sign(Income.Taxes.Paid) * log(abs(Income.Taxes.Paid) + 0.000001) ~ Log.Mod.Lobbying.Expenditures + generalized_residuals + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total | GIC.Industries + Year, vcov = ~GIC.Industries, data = CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+etable(TWFE_IT_log_modulus_paid_log, fitstat = ~ n + r2 + wr2)
+
+
+#Obtaining Exposure-Robust (Adão-Kolesár-Morales) Standard Errors for Income Taxes Current and Paid
+
+CurrentLobbyingAccounting$Log.Mod.Income.Tax.Current <- sign(CurrentLobbyingAccounting$Income.Taxes...Current) * log(abs(CurrentLobbyingAccounting$Income.Taxes...Current) + 0.000001)
+
+CurrentLobbyingAccounting$Log.Mod.Income.Tax.Paid <- sign(CurrentLobbyingAccounting$Income.Taxes.Paid) * log(abs(CurrentLobbyingAccounting$Income.Taxes.Paid) + 0.000001)
+
+Log.Mod.Log.Mod.Current_ss_se <- ivreg_ss(Log.Mod.Income.Tax.Current ~ generalized_residuals + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total + factor(GIC.Industries) + factor(Year) | Log.Mod.Predicted.Lobbying, X = alt.bartik.instrument, data = CurrentLobbyingAccounting, W=W, method=c("akm"))
+
+print(Log.Mod.Log.Mod.Current_ss_se)
+
+Log.Mod.Log.Mod.Paid_ss_se <- ivreg_ss(Log.Mod.Income.Tax.Paid ~ generalized_residuals + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total + factor(GIC.Industries) + factor(Year) | Log.Mod.Predicted.Lobbying, X = alt.bartik.instrument, data = CurrentLobbyingAccounting, W=W, method=c("akm"))
+
+print(Log.Mod.Log.Mod.Paid_ss_se)
+
+Log.Mod.Log.Mod.Current_ss_se <- ivreg_ss(Log.Mod.Income.Tax.Current ~ generalized_residuals + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total + factor(GIC.Industries) + factor(Year) | Log.Mod.Predicted.Lobbying, X = alt.bartik.instrument, data = CurrentLobbyingAccounting, W=W, method=c("akm"))
+
+print(Log.Mod.Log.Mod.Current_ss_se)
+
+Log.Mod.Log.Mod.Paid_No2SRI_ss_se <- ivreg_ss(Log.Mod.Income.Tax.Paid ~ Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total + factor(GIC.Industries) + factor(Year) | Log.Mod.Predicted.Lobbying, X = alt.bartik.instrument, data = CurrentLobbyingAccounting, W=W, method=c("akm"))
+
+print(Log.Mod.Log.Mod.Paid_No2SRI_ss_se)
+
+Log.Mod.Log.Mod.Current_No2SRI_ss_se <- ivreg_ss(Log.Mod.Income.Tax.Current ~ Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total + factor(GIC.Industries) + factor(Year) | Log.Mod.Predicted.Lobbying, X = alt.bartik.instrument, data = CurrentLobbyingAccounting, W=W, method=c("akm"))
+
+print(Log.Mod.Log.Mod.Current_No2SRI_ss_se)
+
+
+##
+
+
+#Robustness Specifications: Log-Log and Log-Linear for Income Taxes Current and Income Taxes Paid
+
+
+iv_second_stage_IT_current_log_log_robust <- feols(log(Income.Taxes...Current) ~ Predicted.Log.Lobbying  + generalized_residuals + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total | GIC.Industries + Year, vcov = ~GIC.Industries, data = CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+etable(iv_second_stage_IT_current_log_log_robust, fitstat = ~ n + r2 + wr2)
+
+
+iv_second_stage_IT_paid_log_log_robust <- feols(log(Income.Taxes.Paid) ~ Predicted.Log.Lobbying  + generalized_residuals + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total | GIC.Industries + Year, vcov = ~GIC.Industries, data = CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+etable(iv_second_stage_IT_paid_log_log_robust, fitstat = ~ n + r2 + wr2)
+
+
+iv_second_stage_IT_current_log_linear_robust <- feols(log(Income.Taxes...Current) ~ Predicted.Lobbying  + generalized_residuals + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total | GIC.Industries + Year, vcov = ~GIC.Industries, data = CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+etable(iv_second_stage_IT_current_log_linear_robust, fitstat = ~ n + r2 + wr2)
+
+
+iv_second_stage_IT_paid_log_linear_robust <- feols(log(Income.Taxes.Paid) ~ Predicted.Lobbying  + generalized_residuals + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total | GIC.Industries + Year, vcov = ~GIC.Industries, data = CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+etable(iv_second_stage_IT_paid_log_linear_robust, fitstat = ~ n + r2 + wr2)
+
+
+#Obtaining Exposure-Robust (Adão-Kolesár-Morales) Standard Errors for Log-Log and Log-Linear Income Taxes Current and Paid
+
+CurrentLobbyingAccounting$Log.Income.Tax.Current <- log(CurrentLobbyingAccounting$Income.Taxes...Current)
+
+CurrentLobbyingAccounting$Log.Income.Tax.Paid <- log(CurrentLobbyingAccounting$Income.Taxes.Paid)
+
+Non_Negative_IT_Paid <- CurrentLobbyingAccounting %>% filter(!is.na(Log.Income.Tax.Paid) & is.finite(Log.Income.Tax.Paid))
+
+Non_Negative_IT_Current <- CurrentLobbyingAccounting %>% filter(!is.na(Log.Income.Tax.Current) & is.finite(Log.Income.Tax.Current))
+
+W_paid <- Non_Negative_IT_Paid %>%
+  select(Firm_Exposure) %>%  # Only the exposure weights column
+  as.matrix()
+
+W_current <- Non_Negative_IT_Current %>%
+  select(Firm_Exposure) %>%  # Only the exposure weights column
+  as.matrix()
+
+Log.Log.Current_ss_se <- ivreg_ss(Log.Income.Tax.Current ~ generalized_residuals + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total + factor(GIC.Industries) + factor(Year) | Predicted.Log.Lobbying, X = alt.bartik.instrument, data = Non_Negative_IT_Current, W=W_current, method=c("akm"))
+
+print(Log.Log.Current_ss_se)
+
+Log.Linear.Current_ss_se <- ivreg_ss(Log.Income.Tax.Current ~ generalized_residuals + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total + factor(GIC.Industries) + factor(Year) | Predicted.Lobbying, X = alt.bartik.instrument, data = Non_Negative_IT_Current, W=W_current, method=c("akm"))
+
+print(Log.Linear.Current_ss_se)
+
+Log.Log.Paid_ss_se <- ivreg_ss(Log.Income.Tax.Paid ~ generalized_residuals + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total + factor(GIC.Industries) + factor(Year) | Predicted.Log.Lobbying, X = alt.bartik.instrument, data = Non_Negative_IT_Paid, W=W_paid, method=c("akm"))
+
+print(Log.Log.Paid_ss_se)
+
+Log.Linear.Paid_ss_se <- ivreg_ss(Log.Income.Tax.Paid ~ generalized_residuals + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total + factor(GIC.Industries) + factor(Year) | Predicted.Lobbying, X = alt.bartik.instrument, data = Non_Negative_IT_Paid, W=W_paid, method=c("akm"))
+
+print(Log.Linear.Paid_ss_se)
+
+
+
+
+#Calculating each lobbying observation's value for Lobbying Expenditure / Income Taxes Paid, and Lobbying Expenditure / Income Taxes Current
+
+#Slight Income Tax increase across observations to avoid dividing by 0. Converted from units of millions of dollars to units of of dollars 
+
+CurrentLobbyingAccounting$L_R_Paid <- CurrentLobbyingAccounting$Lobbying.Expenditures / ((CurrentLobbyingAccounting$Income.Taxes.Paid + 0.000001)*1000000)
+
+
+CurrentLobbyingAccounting$L_R_Current <- CurrentLobbyingAccounting$Lobbying.Expenditures / ((CurrentLobbyingAccounting$Income.Taxes...Current + 0.000001)*1000000)
+
+
+#Taking Log.Mod. coefficients and dividing elasticity of paid income tax to lobbying and current income tax to lobbying by L/R
+
+CurrentLobbyingAccounting$Paid.Differential <- -0.4599 / CurrentLobbyingAccounting$L_R_Paid
+
+CurrentLobbyingAccounting$Current.Differential <- -0.7446 / CurrentLobbyingAccounting$L_R_Current
+
+
+#Taking structural transformations of differentials by expected effect of individual lobbying on industry share:
+
+#Dividing by structural terms:
+
+CurrentLobbyingAccounting$Share.Effect.On.Paid.Tax <- CurrentLobbyingAccounting$Paid.Differential / ((CurrentLobbyingAccounting$Total.Federal.Lobbying - CurrentLobbyingAccounting$Industry.Lobbying.Expenditures)/(CurrentLobbyingAccounting$Total.Federal.Lobbying^2))
+
+CurrentLobbyingAccounting$Share.Effect.On.Current.Tax <- CurrentLobbyingAccounting$Current.Differential / ((CurrentLobbyingAccounting$Total.Federal.Lobbying - CurrentLobbyingAccounting$Industry.Lobbying.Expenditures)/(CurrentLobbyingAccounting$Total.Federal.Lobbying^2))
+
+
+#Converting to Log Modulus Forms
+
+CurrentLobbyingAccounting$Log.Mod.Share.Effect.On.Paid.Tax <- sign(CurrentLobbyingAccounting$Share.Effect.On.Paid.Tax) * log(abs(CurrentLobbyingAccounting$Share.Effect.On.Paid.Tax) + 1)
+
+CurrentLobbyingAccounting$Log.Mod.Share.Effect.On.Current.Tax <- sign(CurrentLobbyingAccounting$Share.Effect.On.Current.Tax) * log(abs(CurrentLobbyingAccounting$Share.Effect.On.Current.Tax) + 1)
+
+
+iv_share_on_paid_log_mod <- feols(sign(Income.Taxes.Paid) * log(abs(Income.Taxes.Paid) + 0.000001) ~ Log.Mod.Share.Effect.On.Paid.Tax + generalized_residuals + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total | GIC.Industries + Year, vcov = ~GIC.Industries, data = CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+etable(iv_share_on_paid_log_mod, fitstat = ~ n + r2 + wr2)
+
+
+iv_share_on_current_log_mod <- feols(sign(Income.Taxes...Current) * log(abs(Income.Taxes...Current) + 0.000001) ~ Log.Mod.Share.Effect.On.Current.Tax + generalized_residuals + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total | GIC.Industries + Year, vcov = ~GIC.Industries, data = CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+etable(iv_share_on_current_log_mod, fitstat = ~ n + r2 + wr2)
+
+
+
+library(fixest)
+library(boot)
+
+
+
+# Bootstrapping function for bootstrapped standard errors
+boot_paid <- function(CurrentLobbyingAccounting, indices) {
+  d <- CurrentLobbyingAccounting[indices, ] # Resample the data
+  model_boot <- feols(sign(Income.Taxes.Paid) * log(abs(Income.Taxes.Paid) + 0.000001) ~ Log.Mod.Share.Effect.On.Paid.Tax + generalized_residuals + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total | GIC.Industries + Year, cluster = d$GIC.Industries, data = d, panel.id = ~id + Year) # Refit the model
+  coef(model_boot) # Return the coefficients
+}
+
+# Perform the bootstrap (R = number of replications)
+boot_results <- boot(data = CurrentLobbyingAccounting, statistic = boot_paid, R = 10000)
+
+# Get bootstrapped standard errors
+boot_se_paid <- apply(boot_results$t, 2, sd)
+
+# Original coefficients
+original_coef_paid <- coef(iv_share_on_paid_log_mod)
+
+# Create a table for comparison
+paid_results_table <- data.frame(
+  Coefficient = original_coef_paid,
+  Original_SE = sqrt(diag(vcov(iv_share_on_paid_log_mod))), # Original standard errors (clustered if specified)
+  Bootstrapped_SE = boot_se_paid
+)
+
+print(paid_results_table)
+
+for (i in 1:length(original_coef_paid)) {
+  ci <- boot.ci(boot_results, type = "perc", index = i)
+  print(paste("CI for", names(original_coef_paid)[i], ":", ci$percent[4], ",", ci$percent[5]))
+}
+
+#Note, bootstrapped standard errors for effect of marginal change industry share of lobbying on firm income taxes paid are smaller for the specification relative to simple clustering by id for all coefficients.
+
+#Note, can subsequently manually append bootstrapped errors and/or confidence intervals to etable Latex output, but direct and seamless substitution is not presently available for etable to my knowledge. 
+
+paid_marg_summary <- summary(iv_share_on_paid_log_mod)
+paid_marg_summary$coeftable[, 2] = c(2.413674e-03, 5.817451e-02, 2.890072e-07, 8.071452e-07, 9.697493e-07, 8.920681e-06, 2.503580e-04, 8.568871e-07)
+
+etable(paid_marg_summary, fitstat = ~ n + r2 + wr2)
+etable(iv_share_on_paid_log_mod)
+
+
+library(fixest)
+library(boot)
+
+
+# Bootstrapping function for marginal effect of industry shift in lobbying share on firm current income tax obligations
+
+boot_current <- function(CurrentLobbyingAccounting, indices) {
+  d <- CurrentLobbyingAccounting[indices, ] # Resample the data
+  current_model_boot <- feols(sign(Income.Taxes...Current) * log(abs(Income.Taxes...Current) + 0.000001) ~ Log.Mod.Share.Effect.On.Current.Tax + generalized_residuals + Market.Value + Assets.Total + Liabilities.Total + Capital.Expenditures + Employees + Inventories.Total | GIC.Industries + Year, cluster = d$GIC.Industries, data = d, panel.id = ~id + Year) # Refit the model
+  coef(current_model_boot) # Return the coefficients
+}
+
+# Perform the bootstrap (R = number of replications) (Current Taxes Paid Primary Specification)
+boot_results_current <- boot(data = CurrentLobbyingAccounting, statistic = boot_current, R = 10000)
+
+# Get bootstrapped standard errors
+boot_se_current <- apply(boot_results_current$t, 2, sd)
+
+# Original coefficients
+original_coef_current <- coef(iv_share_on_current_log_mod)
+
+# Create a table for comparison
+current_results_table <- data.frame(
+  Coefficient = original_coef_current,
+  Original_SE = sqrt(diag(vcov(iv_share_on_current_log_mod))), # Original standard errors (clustered if specified)
+  Bootstrapped_SE = boot_se_current
+)
+
+print(current_results_table)
+
+for (i in 1:length(original_coef_current)) {
+  ci <- boot.ci(boot_results_current, type = "perc", index = i)
+  print(paste("CI for", names(original_coef_current)[i], ":", ci$percent[4], ",", ci$percent[5]))
+}
+
+#Note, bootstrapped standard errors for effect of marginal change industry share of lobbying on firm current tax obligations are, again, smaller for the specification relative to simple clustering by id for all coefficients.
+
+current_marg_summary <- summary(iv_share_on_current_log_mod)
+current_marg_summary$coeftable[, 2] = c(2.114865e-03, 6.909365e-02, 3.221957e-07, 2.474729e-06, 2.711126e-06, 1.254165e-05, 3.074669e-04, 1.075481e-06)
+etable(current_marg_summary, fitstat = ~ n + r2 + wr2)
+etable(iv_share_on_current_log_mod)
+
+
+
+
+
+
+##########
+
+#Descriptive Statistics Reporting
+
+install.packages('ggplot2')
+library(ggplot2)
+
+install.packages('zoo')
+library(zoo)
+
+install.packages('strucchange')
+library(strucchange)
+
+install.packages('ggfortify')
+library(ggfortify)
+
+install.packages("scales")
+library(scales)
+
+
+
+Non_Industry_Lobbying_Summary <- Non_Industry_Lobbying_OS %>% 
+
+group_by(Year) %>% 
+
+summarise('Total Non-Industry Specific Lobbying Expenditures' = mean(`Total Non-Industry Specific Expenditures`))
+
+Non_Industry_Lobbying_Summary$Category <- "Total Non-Industry Specific Lobbying Expenditures"
+
+Non_Industry_Lobbying_Summary <- mutate(Non_Industry_Lobbying_Summary, Label = ifelse(Year == 2022, "Non-Industry Specific", NA), Category = as.character(Category))
+
+
+Non_Industry_Lobbying_Summary2 <- Non_Industry_Lobbying_OS %>% 
+
+group_by(Year) %>% 
+
+summarise('Percent Non-Industry Expenditures (%)' = 100*mean(`Percent Non-Industry Specific`))
+
+Non_Industry_Lobbying_Summary2$Category2 <- "Percent Non-Industry Expenditures (%)"
+
+Non_Industry_Lobbying_Summary2 <- mutate(Non_Industry_Lobbying_Summary2, Label = ifelse(Year == 2022, "Percent Non-Industry Expenditures (%)", NA), Category2 = as.character(Category2))
+
+
+Total_Lobbying_Summary <- Non_Industry_Lobbying_OS %>% 
+
+group_by(Year) %>% 
+
+summarise('Federal Lobbying Expenditures ($M)' = mean(`Total Federal Lobbying Expenditures`/1000000))
+
+Total_Lobbying_Summary$Category <- "Total Federal Lobbying Expenditures"
+
+Total_Lobbying_Summary <- mutate(Total_Lobbying_Summary, Label = ifelse(Year == 2022, "Total Federal", NA), Category = as.character(Category))
+
+Graphical_df <- merge(Total_Lobbying_Summary, Non_Industry_Lobbying_Summary2, by = "Year")
+
+
+  
+  
+  
+ggplot() + 
+  ggtitle("Annual Total Federal Lobbying Expenditures") +
+
+geom_line(data=Total_Lobbying_Summary, aes(x=Year, y=`Federal Lobbying Expenditures ($M)`), color='red', size = 1.5) +
+
+  scale_color_manual(values = c("Total Lobbying Expenditures" = "red")) +
+  scale_y_continuous(labels = comma) +
+  scale_color_manual(values = colors) 
+  theme_minimal()
+  
+  
+  
+  
+  
+  
+ggplot() + 
+  ggtitle("Percent Non-Industry Specific Lobbying Expenditures") +
+
+geom_line(data=Non_Industry_Lobbying_Summary2, aes(x=Year, y=`Percent Non-Industry Expenditures (%)`), color='black', size = 1.5) +
+
+  scale_color_manual(values = c("Non-Industry Specific" = "black")) +
+  scale_y_continuous(labels = comma) +
+  scale_color_manual(values = colors) 
+  theme_minimal()
+  
+
+#### Summary and Table Reporting
+  
+
+library(stargazer)
+
+Summary_Subset_Accounting_Panel <- Accounting_Panel[, c("Market.Value...Total...Fiscal", "Assets...Total", "Liabilities...Total", "Capital.Expenditures", "Employees", "Inventories...Total", "Lobbying.Expenditures", "IfLobby..Current.", "Income.Taxes.Paid", "Income.Taxes...Current", "Unrecog..Tax.Benefits...End.of.Year")]
+
+colnames(Summary_Subset_Accounting_Panel) <- c("Market Value ($M)", "Total Assets ($M)", "Total Liabilities ($M)", "Capital Expenditures ($M)", "Employees (Thousands)", "Total Inventories ($M)", "Lobbying Expenditures ($)", "If Lobbying", "Income Taxes Paid ($M)", "Income Taxes Current ($M)", "Unrecognized Tax Benefits ($M)")
+
+# Print the combined summary table
+
+FullSummaryTable <- stargazer(as.data.frame(Summary_Subset_Accounting_Panel), type="latex", title = "Descriptive Statistics - Full Sample", out = "FullSummary.tex")
+
+print(FullSummaryTable, 
+      include.rownames = FALSE, 
+      floating = TRUE, 
+      booktabs = TRUE)
+
+
+sink("FullSummaryTable.tex")
+print(FullSummaryTable, 
+      include.rownames = FALSE, 
+      floating = TRUE, 
+      booktabs = TRUE)
+sink()
+
+
+Summary_Subset_Lobbying_Firms <- CurrentLobbyingAccounting[, c("Market.Value...Total...Fiscal", "Assets...Total", "Liabilities...Total", "Capital.Expenditures", "Employees", "Inventories...Total", "Lobbying.Expenditures", "IfLobby..Current.", "Income.Taxes.Paid", "Income.Taxes...Current", "Unrecog..Tax.Benefits...End.of.Year")]
+
+colnames(Summary_Subset_Lobbying_Firms) <- c("Market Value ($M)", "Total Assets ($M)", "Total Liabilities ($M)", "Capital Expenditures ($M)", "Employees (Thousands)", "Total Inventories ($M)", "Lobbying Expenditures ($)", "If Lobbying", "Income Taxes Paid ($M)", "Income Taxes Current ($M)", "Unrecognized Tax Benefits ($M)")
+  
+LobbyingFirmSummary <- stargazer(as.data.frame(Summary_Subset_Lobbying_Firms), type="latex", title = "Descriptive Statistics - Lobbying Firms")
+
+
+sink("LobbyingFirmSummary.tex")
+print(LobbyingFirmSummary, 
+      include.rownames = FALSE, 
+      floating = TRUE, 
+      booktabs = FALSE)
+sink()
+  
+
+setFixest_dict(c(Lobbying.Expenditures = "Lobbying Expenditures", alt.bartik.instrument = "Bartik (Shift-Share) IV", Firm.Size = "Firm Size", Capital.Intensity = "Capital Intensity", Inventory.Intensity = "Inventory Intensity", Labor.Intensity = "Labor Intensity", Leverage = "Leverage", GIC.Industries= "Industry (GIC)", Log.Mod.Predicted.Lobbying = "Predicted Log.Mod(Lobbying Expenditures)", generalized_residuals = "2SRI", Predicted.Lobbying = "Predicted Lobbying Expenditures", Income.Taxes.Paid = "Income Taxes Paid", Income.Taxes...Current = "Income Taxes Current", Unrecog..Tax.Benefits...End.of.Year = "Unrecognized Tax Benefits", Log.Mod.Share.Effect.On.Paid.Tax = "Log.Mod(Industry.Share.Margin)", Log.Mod.Share.Effect.On.Current.Tax = "Log.Mod(Industry.Share.Margin)", Log.Mod.Lobbying.Expenditures = "Log.Mod(Lobbying Expenditures)", Predicted.Log.Lobbying = "Predicted Log(Lobbying Expenditures)", Market.Value = "Market Value", Assets.Total = "Total Assets", Liabilities.Total = "Total Liabilities", Capital.Expenditures = "Capital Expenditures", Employees = "Employees", Inventories.Total = "Total Inventories", "(sign(Lobbying.Expenditures)*log(abs(Lobbying.Expenditures)+1)" = "Log.Mod(Lobbying Expenditures)", "sign(Income.Taxes...Current)*log(abs(Income.Taxes...Current)+0.000001)" = "Log.Mod(Income Taxes Current)", "sign(Income.Taxes.Paid)*log(abs(Income.Taxes.Paid)+0.000001)" = "Log.Mod(Income Taxes Paid)"))
+
+
+
+library(pander)
+
+my_style = style.df(depvar.title = "", fixef.title = "", 
+                    fixef.suffix = " fixed effect", yesNo = "yes")
+setFixest_etable(style.df = my_style, postprocess.df = pandoc.table.return)
+
+
+#Control Function Residual Probit Reporting
+
+stargazer(Probability_Probit, type = "latex", out="probit.tex")
+
+#Primary First Stage IV Specifications
+
+First_Stage_Primary <- etable(iv_first_stage_p, iv_first_stage_log_mod, fitstat = ~ n + r2 + wr2 + wald, tex = TRUE)
+
+
+sink("First_Stage_Primary.tex")
+print(First_Stage_Primary, 
+      include.rownames = FALSE, 
+      floating = TRUE, 
+      booktabs = TRUE)
+sink()
+
+
+
+#Unrecognized Tax Benefits
+
+
+Unrecognized_Tax_Benefit_Summary <- etable(iv_second_stage_Benefits_p, iv_second_stage_Benefits_No2SRI, TWFE_Benefits_p,fitstat = ~ n + r2 + wr2, tex = TRUE)
+
+sink("Unrecognized_Tax_Benefit_Summary.tex")
+print(Unrecognized_Tax_Benefit_Summary, 
+      include.rownames = FALSE, 
+      floating = TRUE, 
+      booktabs = TRUE)
+sink()
+
+
+
+#Income Taxes Paid
+
+Income_Taxes_Paid_Summary <- etable(iv_second_stage_IT_log_modulus_paid_log, iv_second_stage_IT_log_modulus_paid_log_No2SRI, TWFE_IT_log_modulus_paid_log, fitstat = ~ n + r2 + wr2, tex = TRUE)
+
+sink("Income_Taxes_Paid_Summary.tex")
+print(Income_Taxes_Paid_Summary, 
+      include.rownames = FALSE, 
+      floating = TRUE, 
+      booktabs = TRUE)
+sink()
+
+
+#Current Income Taxes
+
+Income_Taxes_Current_Summary <- etable(iv_second_stage_IT_log_modulus_current_log, iv_second_stage_IT_log_modulus_current_log_No2SRI, TWFE_IT_log_modulus_current_log, fitstat = ~ n + r2 + wr2, tex = TRUE)
+
+sink("Income_Taxes_Current_Summary.tex")
+print(Income_Taxes_Current_Summary, 
+      include.rownames = FALSE, 
+      floating = TRUE, 
+      booktabs = TRUE)
+sink()
+
+
+
+#Structural Industry Share Impact
+
+Structural_Impact_Summary <- etable(iv_share_on_paid_log_mod, iv_share_on_current_log_mod, fitstat = ~ n + r2 + wr2, tex = TRUE)
+
+sink("Structural_Impact_Summary_Table.tex")
+print(Structural_Impact_Summary, 
+      include.rownames = FALSE, 
+      floating = TRUE, 
+      booktabs = TRUE)
+sink()
+
+
+
+
+###Robustness Specifications
+
+
+
+
+#Specification of Elasticity with Ordinary Logarithmic Transformation in lieu of Log Modulus transformations:
+
+#Log-Log and Log-Linear Transformations in lieu of Log Modulus Transformations:
+
+Robust_Summary <- etable(iv_second_stage_IT_paid_log_log_robust, iv_second_stage_IT_current_log_log_robust, iv_second_stage_IT_paid_log_linear_robust, iv_second_stage_IT_current_log_linear_robust, fitstat = ~ n + r2 + wr2, tex = TRUE)
+
+
+sink("Robust_Summary.tex")
+print(Robust_Summary, 
+      include.rownames = FALSE, 
+      floating = TRUE, 
+      booktabs = TRUE)
+sink()
+
+
+
+
+###Bartik Instrument Placebo/Other Testing
+
+
+#Correlation of Bartik Instrument with GIC Industry classification
+
+anova_model <- aov(alt.bartik.instrument ~ GIC.Industries, data = CurrentLobbyingAccounting)
+
+install.packages('xtable')
+library(xtable)
+
+# Summary Table of the ANOVA Result
+xtable(anova_model)
+
+
+#Box Plot
+
+boxplot(alt.bartik.instrument ~ GIC.Industries, data = CurrentLobbyingAccounting,
+        main = "Boxplot of Shift-Share IV Value by GIC Industry", ylab = "IV", xlab = " GIC Industry")
+
+jpeg("ivboxplot.jpg", width = 800, height = 600)  # Specify file name and size
+boxplot(alt.bartik.instrument ~ GIC.Industries, data = CurrentLobbyingAccounting, main = "Boxplot of Shift-Share IV Value by GIC Industry", ylab = "IV", xlab = " GIC Industry")
+
+#Results demonstrate provide evidence for lack of differential means in the Bartik instrument value based on industry classification code of firms in the sample. 
+
+
+#Pearson Correlation to Test for potential unobserved confounding relationship between effects of tax policy and percentage shifts in non-industry lobbying.
+
+#Lobbying Firms
+
+correlation_current <- cor(CurrentLobbyingAccounting$Non.Firm.Specific.Shift.Share*100, CurrentLobbyingAccounting$Income.Taxes...Current)
+
+correlation_paid <- cor(CurrentLobbyingAccounting$Non.Firm.Specific.Shift.Share*100, CurrentLobbyingAccounting$Income.Taxes.Paid)
+
+correlation_benefits <- cor(CurrentLobbyingAccounting$Non.Firm.Specific.Shift.Share*100, CurrentLobbyingAccounting$Unrecog..Tax.Benefits...End.of.Year)
+
+
+
+# Create the scatter plots with ggplot2
+ggplot(data = CurrentLobbyingAccounting, aes(x = Non.Firm.Specific.Shift.Share*100, y = Income.Taxes...Current)) +
+  geom_point() +  # Add points
+  geom_smooth(method = "lm", color = "red", linetype = "dashed") +  
+  annotate("text", x = min(CurrentLobbyingAccounting$Non.Firm.Specific.Shift.Share*100), y = max(CurrentLobbyingAccounting$Income.Taxes...Current), label = paste("Correlation = ", round(correlation_current, 3)), 
+           hjust = 0, vjust = 1, size = 5, color = "black") +  # Add correlation text to plot
+  theme_minimal() +
+  labs(title = "Income Taxes Current and Corresponding ∆% Non-Industry Lobbying", x = "∆% Non-Industry Lobbying", y = "Income Taxes Current ($M)")
+
+
+ggplot(data = CurrentLobbyingAccounting, aes(x = Non.Firm.Specific.Shift.Share*100, y = Income.Taxes.Paid)) +
+  geom_point() +  # Add points
+  geom_smooth(method = "lm", color = "red", linetype = "dashed") +  
+  annotate("text", x = min(CurrentLobbyingAccounting$Non.Firm.Specific.Shift.Share*100), y = max(CurrentLobbyingAccounting$Income.Taxes.Paid), label = paste("Correlation = ", round(correlation_paid, 3)), 
+           hjust = 0, vjust = 1, size = 5, color = "black") +  # Add correlation text to plot
+  theme_minimal() +
+  labs(title = "Income Taxes Paid and Corresponding ∆% Non-Industry Lobbying", x = "∆% Non-Industry Lobbying", y = "Income Taxes Paid ($M)")
+
+ggplot(data = CurrentLobbyingAccounting, aes(x = Non.Firm.Specific.Shift.Share*100, y = Unrecog..Tax.Benefits...End.of.Year)) +
+  geom_point() +  # Add points
+  geom_smooth(method = "lm", color = "red", linetype = "dashed") +  
+  annotate("text", x = min(CurrentLobbyingAccounting$Non.Firm.Specific.Shift.Share*100), y = max(CurrentLobbyingAccounting$Unrecog..Tax.Benefits...End.of.Year), label = paste("Correlation = ", round(correlation_benefits, 3)), 
+           hjust = 0, vjust = 1, size = 5, color = "black") +  # Add correlation text to plot
+  theme_minimal() +
+  labs(title = "Unrecognized Tax Benefits and Corresponding ∆% Non-Industry Lobbying", x = "∆% Non-Industry Lobbying", y = "Unrecognized Tax Benefits ($M)")
+
+
+
+
+
+cor.test(CurrentLobbyingAccounting$Non.Firm.Specific.Shift.Share, CurrentLobbyingAccounting$Income.Taxes...Current, method = "pearson")
+
+cor.test(CurrentLobbyingAccounting$Non.Firm.Specific.Shift.Share, CurrentLobbyingAccounting$Income.Taxes.Paid, method = "pearson")
+
+cor.test(CurrentLobbyingAccounting$Non.Firm.Specific.Shift.Share, CurrentLobbyingAccounting$Unrecog..Tax.Benefits...End.of.Year, method = "pearson")
+
+
+
+#Results: No evidence of visible correlations between percentage shifts in non-industry lobbying and general tax outcomes across lobbying firms
+
+
+#Presenting Correlation Results as Violin Plots
+
+library(ggplot2)
+library(scales)
+
+ggplot(CurrentLobbyingAccounting, aes(x = as.factor(Non.Firm.Specific.Shift.Share*100), y = Income.Taxes.Paid)) +
+  geom_violin(fill = "lightblue") +
+  geom_boxplot(width = 0.2, fill = "white") +
+  labs(title = "Spearman Correlation - ∆% Non-Industry Lobbying and Income Taxes Paid",
+       x = "∆% Non-Industry Lobbying", y = "Income Taxes Paid ($M)") +
+scale_x_discrete(
+    labels = function(x) {
+      # Format numeric labels to 2 decimal places
+      format(as.numeric(x), digits = 1)  # or use round(as.numeric(x), 2)
+    }
+  ) +
+  theme_minimal()
+
+ggplot(CurrentLobbyingAccounting, aes(x = as.factor(Non.Firm.Specific.Shift.Share*100), y = Income.Taxes...Current)) +
+  geom_violin(fill = "lightblue") +
+  geom_boxplot(width = 0.2, fill = "white") +
+  labs(title = "Spearman Correlation - ∆% Non-Industry Lobbying and Income Taxes Current",
+       x = "∆% Non-Industry Lobbying", y = "Income Taxes Current ($M)") +
+scale_x_discrete(
+    labels = function(x) {
+      # Format numeric labels to 2 decimal places
+      format(as.numeric(x), digits = 1)  # or use round(as.numeric(x), 2)
+    }
+  ) +
+  theme_minimal()
+
+
+ggplot(CurrentLobbyingAccounting, aes(x = as.factor(Non.Firm.Specific.Shift.Share*100), y = Unrecog..Tax.Benefits...End.of.Year)) +
+  geom_violin(fill = "lightblue") +
+  geom_boxplot(width = 0.2, fill = "white") +
+  labs(title = "Spearman Correlation - ∆% Non-Industry Lobbying and Unrecognized Tax Benefits",
+       x = "∆% Non-Industry Lobbying", y = "Unrecognized Tax Benefits ($M)") +
+scale_x_discrete(
+    labels = function(x) {
+      # Format numeric labels to 2 decimal places
+      format(as.numeric(x), digits = 1)  # or use round(as.numeric(x), 2)
+    }
+  ) +
+  theme_minimal()
+
+
+
+#Implementing Borusyak and Hull (2023) recommendations for permutation testing
+
+library(dplyr)
+install.packages("purrr")
+library(purrr)
+
+#Specifying a hypothesized data generating process for the observed shocks to obtain a distribution of counterfactuals. This is certainly open to variation in the specification according to Borusyak and Hull (2023). 
+
+
+
+
+#Current specification below uses annual shifts in percentage of non-industry lobbying from 1999 to 2022, reflected in the cleaned data for analysis, largest available sample of the proposed non-industry lobbying shock of interest.  
+
+
+#Continuous Alternative Counterfactual Shock Distribution Specifcations
+
+
+Observed_Shocks <- c(0.003027661, 0.01318749, 0.005797745, 0.005539664, -0.002045235, 0.005494057, 0.003095418, -0.008804657, -0.00951, -0.00054, 0.006669, -0.00412, -0.0204, 0.009596, -0.00905, 0.01268, -0.01258, 0.004533, 0.0000718, 0.003723943, 0.001402095, -0.017261311, 0.00365471, -0.001054202) 
+
+
+install.packages("forecast")
+library(forecast)
+
+#Fitting a simple AR(1) model to account for potential autocorrelation in underlying process for shocks (persistence in the direction of changes):
+
+num_draws == 1000
+
+ar_model <- arima(Observed_Shocks, order = c(1, 0, 0))  # AR(1)
+
+# Simulate counterfactual shocks
+set.seed(123)
+ar_counterfactual_shocks <- replicate(
+  num_draws,
+  arima.sim(model = list(ar = ar_model$coef["ar1"]), n = 24),
+  simplify = FALSE
+)
+
+# Example: View first sample
+print(ar_counterfactual_shocks[[1]])
+
+
+# Function to compute shift-share instrument for a set of shocks
+recompute_shift_share <- function(shocks) {
+  CurrentLobbyingAccounting %>%
+    group_by(id) %>%  # Group by firm
+    mutate(shift_share_dist = Firm_Exposure * shocks[Year - 2006]) %>%  # Align years with shocks
+    pull(shift_share_dist)
+}
+
+
+###
+
+
+# Apply to all counterfactual shocks
+ar_counterfactual_shift_share_instruments <- map(ar_counterfactual_shocks, recompute_shift_share)
+
+print(ar_counterfactual_shift_share_instruments[[1]])
+
+# Compute average shift-share instrument
+
+ar_counterfactual_average_instrument <- Reduce(
+  "+", 
+  ar_counterfactual_shift_share_instruments, 
+  accumulate = FALSE
+) / num_draws
+
+
+# Add to primary working data
+
+CurrentLobbyingAccounting <- CurrentLobbyingAccounting %>%
+  mutate(ar_counterfactual_average_instrument = ar_counterfactual_average_instrument)
+  
+
+#Note, need to merge the counterfactual average instrument to the full lobbying and non-lobbying panel below to compute the robustness recentered probit generalized residuals
+
+BHdf <- Accounting_Panel %>%
+  left_join(CurrentLobbyingAccounting, by = c("id", "Year")) %>%  # Join based on matching columns
+  mutate(ar_counterfactual_average_instrument = ar_counterfactual_average_instrument)
+
+###Generating "Recentered Treatment"
+
+BHdf$RecenteredIV <- BHdf$alt.bartik.instrument.x - BHdf$ar_counterfactual_average_instrument
+
+
+#Borusyak and Hull (2023)'s final step in application is to obtain a "recentered treatment" based on subtraction of the 'average expected treatment' from the actual treatment.
+
+#########
+
+#Can consider below:
+
+BHdf$RecenteredIV <- ifelse(is.na(BHdf$RecenteredIV), 0, BHdf$RecenteredIV) #Replacing non-lobbying firm NA values with 0 
+
+
+#Replicating Primary Probit Specification with Recentered IV
+
+R_Probability_Probit <- glm(Lobbying.Expenditures.x > 0 ~ RecenteredIV + Market.Value.x + Assets.Total.x + Liabilities.Total.x + Capital.Expenditures.x + Employees.x + Inventories.Total.x + factor(GIC.Industries.x) + factor(Year), family = binomial(link = "probit"), data = BHdf)
+
+summary(R_Probability_Probit)
+
+stargazer(R_Probability_Probit, type = "latex", out="recentered_iv_probit.tex")
+
+##Note,Probit Model with unit fixed effects may take long time to run, creates an incidental parameters problem, creates collinearity with many units that do not vary in whether they lobbied in a given year.
+
+
+
+##
+
+
+R_z_hat <- predict(R_Probability_Probit, type = "link")
+
+R_phi <- dnorm(R_z_hat)
+R_Phi <- pnorm(R_z_hat)
+
+# Generalized residuals
+
+BHdf$R_generalized_residuals <- ifelse(BHdf$Lobbying.Expenditures.x > 0,  R_phi / R_Phi,  -R_phi / (1 - R_Phi))
+
+
+R_CurrentLobbyingAccounting <- BHdf[BHdf$IfLobby..Current..x == 1, ]
+
+
+#Repeating Primary Specifications with Recentered IV
+
+
+
+R_iv_first_stage_p <- feols(Lobbying.Expenditures.x ~ RecenteredIV + Market.Value.x + Assets.Total.x + Liabilities.Total.x + Capital.Expenditures.x + Employees.x + Inventories.Total.x | GIC.Industries.x + Year, vcov = ~GIC.Industries.x, data = R_CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+etable(R_iv_first_stage_p, fitstat = ~ n + r2 + wr2 + wald)
+
+
+R_iv_first_stage_log <- feols(log(Lobbying.Expenditures.x) ~ RecenteredIV + Market.Value.x + Assets.Total.x + Liabilities.Total.x + Capital.Expenditures.x + Employees.x + Inventories.Total.x | GIC.Industries.x + Year, vcov = ~GIC.Industries.x, data = R_CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+etable(R_iv_first_stage_log, fitstat = ~ n + r2 + wr2 + wald)
+
+R_iv_first_stage_log_mod <- feols((sign(Lobbying.Expenditures.x) * log(abs(Lobbying.Expenditures.x) + 1)) ~ RecenteredIV + Market.Value.x + Assets.Total.x + Liabilities.Total.x + Capital.Expenditures.x + Employees.x + Inventories.Total.x | GIC.Industries.x + Year, vcov = ~GIC.Industries.x, data = R_CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+etable(R_iv_first_stage_log_mod, fitstat = ~ n + r2 + wr2 + wald)
+
+
+
+R_CurrentLobbyingAccounting$R_Predicted.Lobbying <- predict(R_iv_first_stage_p)
+
+R_CurrentLobbyingAccounting$R_Predicted.Log.Lobbying <- predict(R_iv_first_stage_log)
+
+R_CurrentLobbyingAccounting$R_Predicted.Log.Mod.Lobbying <- predict(R_iv_first_stage_log_mod)
+
+
+
+R_iv_second_stage_Benefits_p <- feols(Unrecog..Tax.Benefits...End.of.Year.x ~ R_Predicted.Lobbying + R_generalized_residuals + Market.Value.x + Assets.Total.x + Liabilities.Total.x + Capital.Expenditures.x + Employees.x + Inventories.Total.x | GIC.Industries.x + Year, vcov = ~GIC.Industries.x, data = R_CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+etable(R_iv_second_stage_Benefits_p, fitstat = ~ n + r2 + wr2)
+
+
+R_iv_second_stage_IT_log_modulus_current_log <- feols(sign(Income.Taxes...Current.x) * log(abs(Income.Taxes...Current.x) + 0.000001) ~ R_Predicted.Log.Mod.Lobbying + R_generalized_residuals + Market.Value.x + Assets.Total.x + Liabilities.Total.x + Capital.Expenditures.x + Employees.x + Inventories.Total.x | GIC.Industries.x + Year, vcov = ~GIC.Industries.x, data = R_CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+etable(R_iv_second_stage_IT_log_modulus_current_log, fitstat = ~ n + r2 + wr2)
+etable(iv_second_stage_IT_log_modulus_current_log, fitstat = ~ n + r2 + wr2)
+
+
+R_iv_second_stage_IT_log_modulus_paid_log <- feols(sign(Income.Taxes.Paid.x) * log(abs(Income.Taxes.Paid.x) + 0.000001) ~ R_Predicted.Log.Mod.Lobbying + R_generalized_residuals + Market.Value.x + Assets.Total.x + Liabilities.Total.x + Capital.Expenditures.x + Employees.x + Inventories.Total.x | GIC.Industries.x + Year, vcov = ~GIC.Industries.x, data = R_CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+etable(R_iv_second_stage_IT_log_modulus_paid_log, fitstat = ~ n + r2 + wr2)
+etable(iv_second_stage_IT_log_modulus_paid_log, fitstat = ~ n + r2 + wr2)
+
+
+
+R_iv_second_stage_IT_log_modulus_current_log <- feols(sign(Income.Taxes...Current.x) * log(abs(Income.Taxes...Current.x) + 0.000001) ~ R_Predicted.Log.Mod.Lobbying + R_generalized_residuals + Market.Value.x + Assets.Total.x + Liabilities.Total.x + Capital.Expenditures.x + Employees.x + Inventories.Total.x | GIC.Industries.x + Year, vcov = ~GIC.Industries.x, data = R_CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+etable(R_iv_second_stage_IT_log_modulus_current_log, fitstat = ~ n + r2 + wr2)
+etable(iv_second_stage_IT_log_modulus_current_log, fitstat = ~ n + r2 + wr2)
+
+
+R_iv_second_stage_IT_log_log_paid <- feols(log(Income.Taxes.Paid.x) ~ R_Predicted.Log.Lobbying + R_generalized_residuals + Market.Value.x + Assets.Total.x + Liabilities.Total.x + Capital.Expenditures.x + Employees.x + Inventories.Total.x | GIC.Industries.x + Year, vcov = ~GIC.Industries.x, data = R_CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+etable(R_iv_second_stage_IT_log_log_paid, fitstat = ~ n + r2 + wr2)
+
+
+R_iv_second_stage_IT_log_log_current <- feols(log(Income.Taxes...Current.x) ~ R_Predicted.Log.Lobbying + R_generalized_residuals + Market.Value.x + Assets.Total.x + Liabilities.Total.x + Capital.Expenditures.x + Employees.x + Inventories.Total.x | GIC.Industries.x + Year, vcov = ~GIC.Industries.x, data = R_CurrentLobbyingAccounting, panel.id = ~id + Year)
+
+etable(R_iv_second_stage_IT_log_log_current, fitstat = ~ n + r2 + wr2)
+
+
+
+#Exposure-Robust Standard Errors for Recentered IV Specifications
+
+R.Benefits_ss_se <- ivreg_ss(Unrecog..Tax.Benefits...End.of.Year.x ~ R_generalized_residuals + Market.Value.x + Assets.Total.x + Liabilities.Total.x + Capital.Expenditures.x + Employees.x + Inventories.Total.x + factor(GIC.Industries.x) + factor(Year) | R_Predicted.Lobbying, X = RecenteredIV, data = R_CurrentLobbyingAccounting, W=W, method=c("akm"))
+
+print(R.Benefits_ss_se)
+
+R.Mod.Log.Current_ss_se <- ivreg_ss(Log.Mod.Income.Tax.Current ~ R_generalized_residuals + Market.Value.x + Assets.Total.x + Liabilities.Total.x + Capital.Expenditures.x + Employees.x + Inventories.Total.x + factor(GIC.Industries.x) + factor(Year) | R_Predicted.Log.Mod.Lobbying, X = RecenteredIV, data = R_CurrentLobbyingAccounting, W=W, method=c("akm"))
+
+print(R.Mod.Log.Current_ss_se)
+
+
+R.Mod.Log.Paid_ss_se <- ivreg_ss(Log.Mod.Income.Tax.Paid ~ R_generalized_residuals + Market.Value.x + Assets.Total.x + Liabilities.Total.x + Capital.Expenditures.x + Employees.x + Inventories.Total.x + factor(GIC.Industries.x) + factor(Year) | R_Predicted.Log.Mod.Lobbying, X = RecenteredIV, data = R_CurrentLobbyingAccounting, W=W, method=c("akm"))
+
+print(R.Mod.Log.Paid_ss_se)
+
+
+R_Non_Negative_IT_Paid <- R_CurrentLobbyingAccounting %>% filter(!is.na(Log.Income.Tax.Paid) & is.finite(Log.Income.Tax.Paid))
+
+R_Non_Negative_IT_Current <- R_CurrentLobbyingAccounting %>% filter(!is.na(Log.Income.Tax.Current) & is.finite(Log.Income.Tax.Current))
+
+W_paid <- R_Non_Negative_IT_Paid %>%
+  select(Firm_Exposure.x) %>%  # Only the exposure weights column
+  as.matrix()
+
+W_current <- R_Non_Negative_IT_Current %>%
+  select(Firm_Exposure.x) %>%  # Only the exposure weights column
+  as.matrix()
+
+
+R.Log.Log.Paid_ss_se <- ivreg_ss(Log.Income.Tax.Paid ~ R_generalized_residuals + Market.Value.x + Assets.Total.x + Liabilities.Total.x + Capital.Expenditures.x + Employees.x + Inventories.Total.x + factor(GIC.Industries.x) + factor(Year) | R_Predicted.Log.Lobbying, X = RecenteredIV, data = R_Non_Negative_IT_Paid, W=W_paid, method=c("akm"))
+
+print(R.Log.Log.Paid_ss_se)
+
+R.Log.Log.Current_ss_se <- ivreg_ss(Log.Income.Tax.Current ~ R_generalized_residuals + Market.Value.x + Assets.Total.x + Liabilities.Total.x + Capital.Expenditures.x + Employees.x + Inventories.Total.x + factor(GIC.Industries.x) + factor(Year) | R_Predicted.Log.Lobbying, X = RecenteredIV, data = R_Non_Negative_IT_Current, W=W_current, method=c("akm"))
+
+print(R.Log.Log.Current_ss_se)
+
+
+
+
+#Reporting Borusyak and Hull 2023 Recommended Placebo Testing
+
+
+
+etable(R_iv_first_stage_p, R_iv_first_stage_log_mod, fitstat = ~ n + r2 + wr2 + wald, tex = TRUE)
+
+
+placebo_iv_first_stage_table <- etable(R_iv_first_stage_p, R_iv_first_stage_log_mod, fitstat = ~ n + r2 + wr2 + wald, tex = TRUE)
+
+print(placebo_iv_first_stage_table, 
+      include.rownames = FALSE, 
+      floating = TRUE, 
+      booktabs = TRUE)
+
+
+sink("placebo_iv_first_stage_table.tex")
+print(placebo_iv_first_stage_table, 
+      include.rownames = FALSE, 
+      floating = TRUE, 
+      booktabs = TRUE)
+sink()
+
+
+
+etable(R_iv_second_stage_Benefits_p, R_iv_second_stage_IT_log_modulus_current_log, R_iv_second_stage_IT_log_modulus_paid_log, R_iv_second_stage_IT_log_log_current, R_iv_second_stage_IT_log_log_paid, fitstat = ~ n + r2 + wr2, tex = TRUE)
+
+
+placebo_iv_second_stage_table <- etable(R_iv_second_stage_Benefits_p, R_iv_second_stage_IT_log_modulus_current_log, R_iv_second_stage_IT_log_modulus_paid_log, R_iv_second_stage_IT_log_log_current, R_iv_second_stage_IT_log_log_paid, fitstat = ~ n + r2 + wr2, tex = TRUE)
+
+print(placebo_iv_second_stage_table, 
+      include.rownames = FALSE, 
+      floating = TRUE, 
+      booktabs = TRUE)
+
+
+sink("placebo_iv_second_stage_table.tex")
+print(placebo_iv_second_stage_table, 
+      include.rownames = FALSE, 
+      floating = TRUE, 
+      booktabs = TRUE)
+sink()
+
+
+
+#Summary for Frequency Table Describing Lobbying Industries in the Sample
+
+
+library(dplyr)
+
+lobbying_industry_summary <- Accounting_Panel %>%
+  group_by(Lobbying.Industry) %>%
+  summarise(
+    Frequency = n(),
+    `Mean Lobbying Expenditure ($)` = mean(Lobbying.Expenditures, na.rm = TRUE),
+    `Mean Industry Lobbying Expenditure ($)` = mean(Industry.Lobbying.Expenditures, na.rm = TRUE),
+    `Mean Market Value ($M)` = mean(Market.Value...Total...Fiscal, na.rm = TRUE),
+    `Mean Capital Expenditure ($M)` = mean(Capital.Expenditures, na.rm = TRUE),
+    `Mean Employees (Thousands)` = mean(Employees, na.rm = TRUE),
+    `Mean Inventories ($M)` = mean(Inventories...Total, na.rm = TRUE),
+    `Mean Assets ($M)` = mean(Assets...Total, na.rm = TRUE),
+    `Mean Liabilities ($M)` = mean(Liabilities...Total, na.rm = TRUE)
+  )
+
+library(xtable)
+
+# Generate LaTeX table
+lobbying_industry_summary_table <- xtable(lobbying_industry_summary, 
+                      caption = "Summary of Firms by Industry", 
+                      label = "tab:summary_firms")
+
+# Print the LaTeX code
+print(lobbying_industry_summary_table, 
+      include.rownames = FALSE, 
+      floating = TRUE, 
+      booktabs = TRUE)
+
+
+sink("lobbying_industry_summary_table.tex")
+print(lobbying_industry_summary_table, 
+      include.rownames = FALSE, 
+      floating = TRUE, 
+      booktabs = TRUE)
+sink()
+
+
+```
