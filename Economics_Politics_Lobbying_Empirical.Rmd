@@ -642,9 +642,6 @@ balance_models <- lapply(covars, function(k) {
 
 etable(balance_models, fitstat = ~ n + r2 + wr2)
 
-#Above works!
-
-
 
 #Truncating Sample to Current Lobbying Firms within each year
 
@@ -690,7 +687,7 @@ etable(iv_first_stage_log_int, fitstat = ~ n + r2 + wr2 + wald)
 
 CurrentLobbyingAccounting$Predicted.Log.Lobbying.Int <- predict(iv_first_stage_log_int)
 
-#Obtaining 1 standard deviation value from predicted log(lobbying) attributable to the instrument:
+#Obtaining 1 standard deviation value from predicted Log(Lobbying Expenditures) attributable to the instrument:
 
 
 controls_only <- feols(Log.Lobbying.Expenditures ~ Revenue...Total + Assets.Total + Liabilities.Total + Capital.Expenditures + In.Process.R.D.Expense + Employees + Inventories.Total | GIC.Industries*Year + original_State.Province, vcov = ~GIC.Industries, data = CurrentLobbyingAccounting, panel.id = ~id + Year)
@@ -1829,7 +1826,7 @@ library(stats)
 
 estimate_sd_effect <- function(boot_data) {
   
-  # --- Step 0. Probit selection on full sample ---
+  #Probit selection on full sample
   sel_model <- glm(Lobbying.Expenditures > 0 ~ LOO.instrument + distance_to_dc_km +
                      Revenue...Total + Assets.Total + Liabilities.Total +
                      Capital.Expenditures + In.Process.R.D.Expense + Employees +
@@ -1841,10 +1838,10 @@ estimate_sd_effect <- function(boot_data) {
                 pnorm(predict(sel_model, type="link"))
   boot_data$IMR_boot <- lambda_hat
   
-  # --- Step 1. Subset to lobbying firms ---
+  # Subset to lobbying firms 
   lobby_data <- subset(boot_data, Lobbying.Expenditures > 0)
   
-  # --- Step 2. Controls-only first stage ---
+  # Controls-only first stage
   controls_only <- feols(Log.Lobbying.Expenditures ~ 
                            Revenue...Total + Assets.Total + Liabilities.Total +
                            Capital.Expenditures + In.Process.R.D.Expense +
@@ -1855,7 +1852,7 @@ estimate_sd_effect <- function(boot_data) {
   
   lobby_data$logL_hat_controls <- predict(controls_only)
   
-  # --- Step 3. Full first stage with IV ---
+  # Full first stage with IV 
   fs_model <- feols(Log.Lobbying.Expenditures ~ 
                       LOO.instrument + Revenue...Total + Assets.Total + Liabilities.Total +
                       Capital.Expenditures + In.Process.R.D.Expense + Employees +
@@ -1869,7 +1866,7 @@ estimate_sd_effect <- function(boot_data) {
   
   s_Z <- sd(lobby_data$logL_hat_Zonly, na.rm = TRUE)
   
-  # --- Step 4. Second stage with IMR ---
+  # Second stage with bootstrapped IMR
   ss_model <- feols(Log.Income.Tax.Paid ~ logL_hat_full + IMR_boot +
                       Revenue...Total + Assets.Total + Liabilities.Total +
                       Capital.Expenditures + In.Process.R.D.Expense +
@@ -1880,11 +1877,13 @@ estimate_sd_effect <- function(boot_data) {
   
   beta_hat <- coef(ss_model)["logL_hat_full"]
   
-  # --- Step 5. Effect of 1-sd IV-induced shift ---
+  # Effect of 1-sd IV-induced shift
   effect <- beta_hat * s_Z
   
   return(c(beta = beta_hat, s_Z = s_Z, effect = effect))
 }
+
+#Applying Bootstrap Function
 
 set.seed(123)
 B <- 500
@@ -1908,7 +1907,7 @@ apply(boot_stats, 2, quantile, probs = c(0.025, 0.975))
 
 ###
 
-#Test
+#Test to ensure computational correctness of above bootstrap prior to loop
 
 boot <- Accounting_Panel
   
@@ -1923,10 +1922,10 @@ boot <- Accounting_Panel
                 pnorm(predict(sel_model, type="link"))
   boot$IMR_boot <- lambda_hat
   
-  # --- Step 1. Subset to lobbying firms ---
+  # Step 1. Subset to lobbying firms 
   lobby_data <- subset(boot, Lobbying.Expenditures > 0)
   
-  # --- Step 2. Controls-only first stage ---
+  # Controls-only first stage 
   controls_only <- feols(Log.Lobbying.Expenditures ~ 
                            Revenue...Total + Assets.Total + Liabilities.Total +
                            Capital.Expenditures + In.Process.R.D.Expense +
@@ -1937,7 +1936,7 @@ boot <- Accounting_Panel
   
   lobby_data$logL_hat_controls <- predict(controls_only)
   
-  # --- Step 3. Full first stage with IV ---
+  # Full first stage with IV 
   fs_model <- feols(Log.Lobbying.Expenditures ~ 
                       LOO.instrument + Revenue...Total + Assets.Total + Liabilities.Total +
                       Capital.Expenditures + In.Process.R.D.Expense + Employees +
@@ -1951,7 +1950,7 @@ boot <- Accounting_Panel
   
   s_Z <- sd(lobby_data$logL_hat_Zonly, na.rm = TRUE)
   
-  # --- Step 4. Second stage with IMR ---
+  # Second stage with IMR
   ss_model <- feols(Log.Income.Tax.Paid ~ logL_hat_full + IMR_boot +
                       Revenue...Total + Assets.Total + Liabilities.Total +
                       Capital.Expenditures + In.Process.R.D.Expense +
@@ -1962,25 +1961,25 @@ boot <- Accounting_Panel
   
   beta_hat <- coef(ss_model)["logL_hat_full"]
   
-  # --- Step 5. Effect of 1-sd IV-induced shift ---
+  # Effect of 1-sd IV-induced shift
   effect <- beta_hat * s_Z
 
 
 ###
 
 
-# Bootstrap of Local Average Treatment Effect and Estimated Net Effect on Tax Revenues from Firms in the Sample
+# Bootstrap of Local Average Treatment Effect and Estimated Net Observed Effect on Tax Revenues from Firms in the Sample
 
 
-library(MASS)       # for mvrnorm if needed
-library(sampleSelection) # if you use Heckman two-step for IMR
+library(MASS)      
+library(sampleSelection) 
 library(lmtest)
 library(sandwich)
 
-# Function to run the full pipeline on one dataset
+# Function
 estimate_pipeline <- function(boot_data) {
   
-  ## Step 1. Probit selection equation (now using boot_data)
+  #Probit selection equation 
   sel_model <- glm(Lobbying.Expenditures > 0 ~ LOO.instrument + distance_to_dc_km +
                      Revenue...Total + Assets.Total + Liabilities.Total +
                      Capital.Expenditures + In.Process.R.D.Expense + Employees +
@@ -1992,9 +1991,9 @@ estimate_pipeline <- function(boot_data) {
                 pnorm(predict(sel_model, type="link"))
   boot_data$IMR_boot <- lambda_hat
   
-#Note, to increase computational time, only using the IMR formula above for selected firms given subsequent truncating of sample into only firms with Lobbying.Expenditures > 0
+#Note, to increase computational time, only using the IMR formula above for selected firms (Lobbying.Expenditures > 0) given subsequent truncating of sample into only firms with Lobbying.Expenditures > 0
   
-  ## Step 2. Subset to lobbying firms
+  # Subset to lobbying firms
   lobby_data <- subset(boot_data, Lobbying.Expenditures > 0)
   
   # First stage (on bootstrapped sample)
@@ -2005,7 +2004,7 @@ estimate_pipeline <- function(boot_data) {
   lobby_data$logL_hat_Zonly <- beta_LOO.instrument * lobby_data$LOO.instrument
   lobby_data$Predicted.Log.Lobbying.Expenditures <- lobby_data$logL_hat
   
-  ## Step 3. Outcome regression (second stage, bootstrapped sample)
+  ## Outcome regression (second stage, bootstrapped sample)
   ss_model <- feols(Log.Income.Tax.Paid ~ Predicted.Log.Lobbying.Expenditures + IMR_boot +
                       Revenue...Total + Assets.Total + Liabilities.Total +
                       Capital.Expenditures + In.Process.R.D.Expense + Employees +
@@ -2016,7 +2015,7 @@ estimate_pipeline <- function(boot_data) {
   
   beta_hat <- coef(ss_model)["Predicted.Log.Lobbying.Expenditures"]
   
-  ## Step 4. Compute effect
+  ## Compute effect
   delta_Ti <- 450.20 * (exp(beta_hat * lobby_data$logL_hat_Zonly) - 1)
   delta_total <- sum(delta_Ti, na.rm = TRUE)
   
