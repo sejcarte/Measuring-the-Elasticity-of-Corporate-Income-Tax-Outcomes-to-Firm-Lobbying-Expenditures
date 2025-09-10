@@ -446,26 +446,6 @@ first_25_rows <- first_25_rows %>%
     ungroup()
   
   
-  # Calculating Own-Industry LOO to remove mechanical correlation from g_n ('shift' in shift-share)
-  merged_data <-  merged_data %>%
-    arrange(id, Year) %>%
-    group_by(id) %>%
-    mutate(
-      # LOO denominators (remove each firm's `own-industry` total lobbying contribution from total federal lobbying basis for shock)
-      Total_Federal_LOO = Total.Federal.Lobbying - Industry.Lobbying.Expenditures,
-      Total_Federal_LOO_lag = dplyr::lag(Total.Federal.Lobbying) - dplyr::lag(Industry.Lobbying.Expenditures),
-      
-      # LOO ratios
-      ratio_loo_current = Total.Non.Industry.Lobbying / Total_Federal_LOO,
-      ratio_loo_lag = dplyr::lag(Total.Non.Industry.Lobbying) / Total_Federal_LOO_lag,
-      
-      # LOO shock
-      g_n_loo = ratio_loo_current - ratio_loo_lag
-    ) %>%
-    ungroup()
-  
-
-#For firms that only lobbied for a single year, or firms in the first year of their lobbying, replacing the leave-one-firm-out shift with the ordinary shift, given that firms that lobby in only one year or are in their first year of lobbying definitively do not affect total lobbying expenditures in the year prior through present expenditures. Baseline shares are conventionally calculated in literature without leaving firm or industry out with subtraction only from g_n.
 
 Industry_Lobbying_OS <- Industry_Lobbying_OS %>%
   mutate(Total.Federal.Less.Own.Industry = Total.Federal.Lobbying.Expenditures - Industry.Lobbying.Expenditures)
@@ -517,29 +497,13 @@ merged_data <- merged_data %>%
     ) %>%
     ungroup()
 
-  #Note for g_n_loo_2 - need to check to make sure that it reasonably compares to the og after replacing the NAs with 0. Also, may need to think more about the value being 0 for never-lobbying / non-lobbying firms given some reasoning about the counterfactual. 
-  
-merged_data <- merged_data %>%
-  group_by(id, Lobbying.Industry) %>%
-  mutate(First.Lobbying.Year = min(Year[Lobbying.Expenditures > 0], na.rm = TRUE),
-    g_n_loo = if_else((Year == First.Lobbying.Year) & IfLobby..Anytime. == 1, g_n, g_n_loo)) %>%
-  ungroup()
-  
-#Above returns 'na' for minimum year of never-lobbying firms
-#0 placed in lieu of 'na' for first value of never-lobbying firms to prevent error in overall instrument calculation
-
-merged_data$gn_loo <- ifelse(is.na(merged_data$g_n_loo), 0, merged_data$g_n_loo)
-
 merged_data$gn_loo_2 <- ifelse(is.na(merged_data$g_n_loo_2), 0, merged_data$g_n_loo_2)
 
 
-#Firm Exposure results in 0 for All Values of Never-Lobbying Firms 
+#Firm Exposure below results in 0 for All Values of Never-Lobbying Firms 
   
 merged_data <- merged_data %>%
   mutate(LOO.instrument = Firm_Exposure * gn_loo_2)
-
-merged_data <- merged_data %>%
-  mutate(LOO.instrument.2 = Firm_Exposure * gn_loo_2)
 
 
 #Robustness Pharmaceutical, Insurance, and Electronics LOO to test against dominant industry presence driving relevance:
