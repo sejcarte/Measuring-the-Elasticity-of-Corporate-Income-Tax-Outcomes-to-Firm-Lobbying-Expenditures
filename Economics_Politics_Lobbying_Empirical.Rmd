@@ -1,5 +1,5 @@
 ---
-title: "Economics_Politics_Lobbying_Empirical"
+title: "Economics_Politics_Revise_and_Resubmit"
 output: html_document
 date: "2025-08-19"
 ---
@@ -310,7 +310,9 @@ Firm_Industry_Panel_B <- Firm_Industry_Panel_B %>%
   mutate(Firm_Exposure = Baseline.Share * Baseline.Industry.Share)
 
 Firm_Industry_Panel_B <- Firm_Industry_Panel_B %>%
-  mutate(LOO.instrument = Firm_Exposure * Non.Firm.Specific.Shift.Share) #Calculating Instrument as Product of Baseline Firm Share of Industry, Corresponding Baseline Industry Share of Federal, and Non-Firm Specific Shift-Share
+  mutate(LOO.instrument = Firm_Exposure * Non.Firm.Specific.Shift.Share) 
+
+#Calculating Instrument as Product of Baseline Firm Share of Industry, Corresponding Baseline Industry Share of Federal, and Non-Firm Specific Shift-Share
 
 Firm_Industry_Panel_B$alt.bartik.instrument <- ifelse(is.na(Firm_Industry_Panel_B$alt.bartik.instrument), 0, Firm_Industry_Panel_B$alt.bartik.instrument) #0 in lieu of NA for non-lobbying firms
 
@@ -446,6 +448,9 @@ first_25_rows <- first_25_rows %>%
     ungroup()
   
   
+  # Calculating Own-Industry LOO to remove mechanical correlation from g_n ('shift' in shift-share)
+  
+#Note: Baseline shares are conventionally calculated in literature without leaving firm or industry out with subtraction only from g_n.
 
 Industry_Lobbying_OS <- Industry_Lobbying_OS %>%
   mutate(Total.Federal.Less.Own.Industry = Total.Federal.Lobbying.Expenditures - Industry.Lobbying.Expenditures)
@@ -478,7 +483,7 @@ merged_data <- merged_data %>%
   left_join(first_25_rows %>% select(Year, l.Total.Non.Industry.Lobbying),
             by = c("Year"))
 
-#Calculating LOO for initial year of a firm's observed lobbying:
+#Calculating LOO IV:
 
   merged_data <-  merged_data %>%
     arrange(id, Year) %>%
@@ -496,11 +501,15 @@ merged_data <- merged_data %>%
       g_n_loo_2 = ratio_loo_current_2 - ratio_loo_lag_2
     ) %>%
     ungroup()
+  
+
+#Above returns 'na' for never-lobbying firms
+#0 placed in lieu of 'na' for first value of never-lobbying firms to prevent error in overall instrument calculation
 
 merged_data$gn_loo_2 <- ifelse(is.na(merged_data$g_n_loo_2), 0, merged_data$g_n_loo_2)
 
 
-#Firm Exposure below results in 0 for All Values of Never-Lobbying Firms 
+#Firm Exposure additionally results in 0 for All Values of Never-Lobbying Firms 
   
 merged_data <- merged_data %>%
   mutate(LOO.instrument = Firm_Exposure * gn_loo_2)
@@ -642,6 +651,9 @@ balance_models <- lapply(covars, function(k) {
 
 etable(balance_models, fitstat = ~ n + r2 + wr2)
 
+#Above works!
+
+
 
 #Truncating Sample to Current Lobbying Firms within each year
 
@@ -687,7 +699,7 @@ etable(iv_first_stage_log_int, fitstat = ~ n + r2 + wr2 + wald)
 
 CurrentLobbyingAccounting$Predicted.Log.Lobbying.Int <- predict(iv_first_stage_log_int)
 
-#Obtaining 1 standard deviation value from predicted Log(Lobbying Expenditures) attributable to the instrument:
+#Obtaining 1 standard deviation value from predicted log(lobbying) attributable to the instrument:
 
 
 controls_only <- feols(Log.Lobbying.Expenditures ~ Revenue...Total + Assets.Total + Liabilities.Total + Capital.Expenditures + In.Process.R.D.Expense + Employees + Inventories.Total | GIC.Industries*Year + original_State.Province, vcov = ~GIC.Industries, data = CurrentLobbyingAccounting, panel.id = ~id + Year)
@@ -880,17 +892,16 @@ BHdf <- Accounting_Panel %>%
   left_join(CurrentLobbyingAccounting, by = c("id", "Year")) %>%  # Join based on matching columns
   mutate(ar_counterfactual_average_instrument = ar_counterfactual_average_instrument)
 
-###Generating "Recentered Treatment" with LOO
+#Generating "Recentered Treatment" as complementary approach to Leave-One-Out
 
 BHdf$RecenteredIV <- BHdf$alt.bartik.instrument.x - BHdf$ar_counterfactual_average_instrument
 
 
-#NA values from never-lobbying firms consistently with uncentered held at 0 instead of NA for IV exposure
+#NA values from never-lobbying firms consistently with uncentered LOO held at 0 instead of NA for IV exposure
 
 BHdf$RecenteredIV <- ifelse(is.na(BHdf$RecenteredIV), 0, BHdf$RecenteredIV)
 
 #Placebo Testing Replication
-
 
 
 R_Probability_Probit_dc <- glm(Lobbying.Expenditures.x > 0 ~ RecenteredIV + distance_to_dc_km.x + Revenue...Total.x + Assets.Total.x + Liabilities.Total.x + Capital.Expenditures.x + In.Process.R.D.Expense.x + Employees.x + Inventories.Total.x + factor(GIC.Industries.x) + factor(Year) + factor(original_State.Province.x), family = binomial(link = "probit"), data = BHdf)
@@ -1824,9 +1835,11 @@ sd(CurrentLobbyingAccounting$logL_hat_Zonly, na.rm=TRUE)
 library(fixest) 
 library(stats)
 
+#Bootstrap for Counterfactual 1-SD increase in Competition-Induced Changes to Lobbying Expenditures
+
 estimate_sd_effect <- function(boot_data) {
   
-  #Probit selection on full sample
+  # Probit selection on full sample 
   sel_model <- glm(Lobbying.Expenditures > 0 ~ LOO.instrument + distance_to_dc_km +
                      Revenue...Total + Assets.Total + Liabilities.Total +
                      Capital.Expenditures + In.Process.R.D.Expense + Employees +
@@ -1841,7 +1854,7 @@ estimate_sd_effect <- function(boot_data) {
   # Subset to lobbying firms 
   lobby_data <- subset(boot_data, Lobbying.Expenditures > 0)
   
-  # Controls-only first stage
+  # Controls-only first stage 
   controls_only <- feols(Log.Lobbying.Expenditures ~ 
                            Revenue...Total + Assets.Total + Liabilities.Total +
                            Capital.Expenditures + In.Process.R.D.Expense +
@@ -1852,7 +1865,7 @@ estimate_sd_effect <- function(boot_data) {
   
   lobby_data$logL_hat_controls <- predict(controls_only)
   
-  # Full first stage with IV 
+  # Full first stage with LOO IV 
   fs_model <- feols(Log.Lobbying.Expenditures ~ 
                       LOO.instrument + Revenue...Total + Assets.Total + Liabilities.Total +
                       Capital.Expenditures + In.Process.R.D.Expense + Employees +
@@ -1866,7 +1879,7 @@ estimate_sd_effect <- function(boot_data) {
   
   s_Z <- sd(lobby_data$logL_hat_Zonly, na.rm = TRUE)
   
-  # Second stage with bootstrapped IMR
+  # Second stage with IMR 
   ss_model <- feols(Log.Income.Tax.Paid ~ logL_hat_full + IMR_boot +
                       Revenue...Total + Assets.Total + Liabilities.Total +
                       Capital.Expenditures + In.Process.R.D.Expense +
@@ -1877,13 +1890,11 @@ estimate_sd_effect <- function(boot_data) {
   
   beta_hat <- coef(ss_model)["logL_hat_full"]
   
-  # Effect of 1-sd IV-induced shift
+  # Effect of 1-sd IV-induced shift 
   effect <- beta_hat * s_Z
   
   return(c(beta = beta_hat, s_Z = s_Z, effect = effect))
 }
-
-#Applying Bootstrap Function
 
 set.seed(123)
 B <- 500
@@ -1907,79 +1918,19 @@ apply(boot_stats, 2, quantile, probs = c(0.025, 0.975))
 
 ###
 
-#Test to ensure computational correctness of above bootstrap prior to loop
 
-boot <- Accounting_Panel
-  
-  sel_model <- glm(Lobbying.Expenditures > 0 ~ LOO.instrument + distance_to_dc_km +
-                     Revenue...Total + Assets.Total + Liabilities.Total +
-                     Capital.Expenditures + In.Process.R.D.Expense + Employees +
-                     Inventories.Total + factor(GIC.Industries) + factor(Year) +
-                     factor(original_State.Province),
-                   family = binomial(link = "probit"), data = boot)
-  
-  lambda_hat <- dnorm(predict(sel_model, type="link")) /
-                pnorm(predict(sel_model, type="link"))
-  boot$IMR_boot <- lambda_hat
-  
-  # Step 1. Subset to lobbying firms 
-  lobby_data <- subset(boot, Lobbying.Expenditures > 0)
-  
-  # Controls-only first stage 
-  controls_only <- feols(Log.Lobbying.Expenditures ~ 
-                           Revenue...Total + Assets.Total + Liabilities.Total +
-                           Capital.Expenditures + In.Process.R.D.Expense +
-                           Employees + Inventories.Total |
-                           GIC.Industries*Year + original_State.Province,
-                         vcov = ~GIC.Industries, data = lobby_data,
-                         panel.id = ~id + Year)
-  
-  lobby_data$logL_hat_controls <- predict(controls_only)
-  
-  # Full first stage with IV 
-  fs_model <- feols(Log.Lobbying.Expenditures ~ 
-                      LOO.instrument + Revenue...Total + Assets.Total + Liabilities.Total +
-                      Capital.Expenditures + In.Process.R.D.Expense + Employees +
-                      Inventories.Total |
-                      GIC.Industries*Year + original_State.Province,
-                    vcov = ~GIC.Industries, data = lobby_data,
-                    panel.id = ~id + Year)
-  
-  lobby_data$logL_hat_full <- predict(fs_model)
-  lobby_data$logL_hat_Zonly <- lobby_data$logL_hat_full - lobby_data$logL_hat_controls
-  
-  s_Z <- sd(lobby_data$logL_hat_Zonly, na.rm = TRUE)
-  
-  # Second stage with IMR
-  ss_model <- feols(Log.Income.Tax.Paid ~ logL_hat_full + IMR_boot +
-                      Revenue...Total + Assets.Total + Liabilities.Total +
-                      Capital.Expenditures + In.Process.R.D.Expense +
-                      Employees + Inventories.Total |
-                      GIC.Industries*Year + original_State.Province,
-                    vcov = ~GIC.Industries, data = lobby_data,
-                    panel.id = ~id + Year)
-  
-  beta_hat <- coef(ss_model)["logL_hat_full"]
-  
-  # Effect of 1-sd IV-induced shift
-  effect <- beta_hat * s_Z
+# Bootstrap of Observed Local Average Treatment Effect and Estimated Observed Net Effect on Tax Revenues from Firms in the Sample
 
 
-###
-
-
-# Bootstrap of Local Average Treatment Effect and Estimated Net Observed Effect on Tax Revenues from Firms in the Sample
-
-
-library(MASS)      
+library(MASS)     
 library(sampleSelection) 
 library(lmtest)
 library(sandwich)
 
-# Function
-estimate_pipeline <- function(boot_data) {
+# Function to run the full pipeline on one dataset
+estimate_observed_effect <- function(boot_data) {
   
-  #Probit selection equation 
+  ## Step 1. Probit selection equation (now using boot_data)
   sel_model <- glm(Lobbying.Expenditures > 0 ~ LOO.instrument + distance_to_dc_km +
                      Revenue...Total + Assets.Total + Liabilities.Total +
                      Capital.Expenditures + In.Process.R.D.Expense + Employees +
@@ -1991,9 +1942,9 @@ estimate_pipeline <- function(boot_data) {
                 pnorm(predict(sel_model, type="link"))
   boot_data$IMR_boot <- lambda_hat
   
-#Note, to increase computational time, only using the IMR formula above for selected firms (Lobbying.Expenditures > 0) given subsequent truncating of sample into only firms with Lobbying.Expenditures > 0
+#Note, to decrease computational time, only using the IMR formula above for positive selecting firms given subsequent truncating of sample into only firms with Lobbying.Expenditures > 0
   
-  # Subset to lobbying firms
+  ## Subset to lobbying firms
   lobby_data <- subset(boot_data, Lobbying.Expenditures > 0)
   
   # First stage (on bootstrapped sample)
@@ -2034,7 +1985,7 @@ boot_stats <- replicate(B, {
     Accounting_Panel[Accounting_Panel$id == fid, ]
   }))
   
-  estimate_pipeline(boot_data)
+  estimate_observed_effect(boot_data)
 })
 
 CI <- quantile(boot_stats, c(0.025, 0.975))
