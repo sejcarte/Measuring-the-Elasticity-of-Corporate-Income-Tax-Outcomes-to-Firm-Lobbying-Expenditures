@@ -1,5 +1,5 @@
 ---
-title: "Economics_Politics_Revise_and_Resubmit"
+title: "Economics_Politics_Lobbying_Empirical"
 output: html_document
 date: "2025-08-19"
 ---
